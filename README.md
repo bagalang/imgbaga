@@ -126,3 +126,7 @@ GIF animation: `gif_anim_decode` → `gif_anim_frame(a, i)` / `gif_anim_delay(a,
 - Rust `image` — `ImageBuffer` / `DynamicImage` / `guess_format` / `imageops`
 - `zipbaga` — inflate/deflate + IEEE CRC-32 used by PNG
 - [gaps](gaps.md) · [PLAN](PLAN.md)
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 Dim Gigov.
