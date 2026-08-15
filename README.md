@@ -14,6 +14,24 @@ per-format codecs, and a small `imageops` set.
 | **Tests** | `tests/img_test.baga` |
 | **Demo** | `demo.baga` — `info` / `convert` / `make` |
 
+This repository is the package. The compiler, `std`, `zipbaga`, and
+`pathbaga` stay in the baga language monorepo. Check this tree out as
+`app-product/imgbaga` there (git submodule) so path deps and
+`-I app-product` keep working.
+
+## Checkout
+
+Inside a baga language clone:
+
+```bash
+git submodule update --init app-product/imgbaga
+# or, first time from a fresh baga tree without the submodule recorded:
+git clone git@github.com:bagalang/imgbaga.git app-product/imgbaga
+```
+
+`sandak.toml` keeps path deps (`../../std`, `../zipbaga`, `../pathbaga`).
+`tests/img_test.baga` stays in baga.
+
 ## Formats
 
 | Format | Sniff | Info (w×h) | Decode | Encode |
