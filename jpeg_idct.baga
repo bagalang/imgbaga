@@ -1,0 +1,132 @@
+// jpeg_idct.baga — integer IDCT (nanojpeg / Loeffler).
+
+import "types.baga"
+
+fn jpg_idct_row(blk: Vec<i64>, off: i64) {
+    let w1 = 2841
+    let w2 = 2676
+    let w3 = 2408
+    let w5 = 1609
+    let w6 = 1108
+    let w7 = 565
+    let x1 = vec_get(blk, off + 4) << 11
+    let x2 = vec_get(blk, off + 6)
+    let x3 = vec_get(blk, off + 2)
+    let x4 = vec_get(blk, off + 1)
+    let x5 = vec_get(blk, off + 7)
+    let x6 = vec_get(blk, off + 5)
+    let x7 = vec_get(blk, off + 3)
+    if (x1 | x2 | x3 | x4 | x5 | x6 | x7) == 0 {
+        let v = vec_get(blk, off) << 3
+        vec_set(blk, off, v)
+        vec_set(blk, off + 1, v)
+        vec_set(blk, off + 2, v)
+        vec_set(blk, off + 3, v)
+        vec_set(blk, off + 4, v)
+        vec_set(blk, off + 5, v)
+        vec_set(blk, off + 6, v)
+        vec_set(blk, off + 7, v)
+        return
+    }
+    let mut x0 = (vec_get(blk, off) << 11) + 128
+    let mut x8 = w7 * (x4 + x5)
+    let nx4 = x8 + (w1 - w7) * x4
+    let nx5 = x8 - (w1 + w7) * x5
+    x8 = w3 * (x6 + x7)
+    let nx6 = x8 - (w3 - w5) * x6
+    let nx7 = x8 - (w3 + w5) * x7
+    x8 = x0 + x1
+    x0 = x0 - x1
+    let mut x1b = w6 * (x3 + x2)
+    let nx2 = x1b - (w2 + w6) * x2
+    let nx3 = x1b + (w2 - w6) * x3
+    let y1 = nx4 + nx6
+    let y4 = nx4 - nx6
+    let y6 = nx5 + nx7
+    let y5 = nx5 - nx7
+    let y7 = x8 + nx3
+    let y8 = x8 - nx3
+    let y3 = x0 + nx2
+    let y0 = x0 - nx2
+    let y2 = (181 * (y4 + y5) + 128) >> 8
+    let y4b = (181 * (y4 - y5) + 128) >> 8
+    vec_set(blk, off, (y7 + y1) >> 8)
+    vec_set(blk, off + 1, (y3 + y2) >> 8)
+    vec_set(blk, off + 2, (y0 + y4b) >> 8)
+    vec_set(blk, off + 3, (y8 + y6) >> 8)
+    vec_set(blk, off + 4, (y8 - y6) >> 8)
+    vec_set(blk, off + 5, (y0 - y4b) >> 8)
+    vec_set(blk, off + 6, (y3 - y2) >> 8)
+    vec_set(blk, off + 7, (y7 - y1) >> 8)
+}
+
+fn jpg_idct_col(blk: Vec<i64>, col: i64) {
+    let w1 = 2841
+    let w2 = 2676
+    let w3 = 2408
+    let w5 = 1609
+    let w6 = 1108
+    let w7 = 565
+    let x1 = vec_get(blk, col + 32) << 8
+    let x2 = vec_get(blk, col + 48)
+    let x3 = vec_get(blk, col + 16)
+    let x4 = vec_get(blk, col + 8)
+    let x5 = vec_get(blk, col + 56)
+    let x6 = vec_get(blk, col + 40)
+    let x7 = vec_get(blk, col + 24)
+    if (x1 | x2 | x3 | x4 | x5 | x6 | x7) == 0 {
+        let v = img_clamp8(((vec_get(blk, col) + 32) >> 6) + 128)
+        vec_set(blk, col, v)
+        vec_set(blk, col + 8, v)
+        vec_set(blk, col + 16, v)
+        vec_set(blk, col + 24, v)
+        vec_set(blk, col + 32, v)
+        vec_set(blk, col + 40, v)
+        vec_set(blk, col + 48, v)
+        vec_set(blk, col + 56, v)
+        return
+    }
+    let mut x0 = (vec_get(blk, col) << 8) + 8192
+    let mut x8 = w7 * (x4 + x5) + 4
+    let nx4 = (x8 + (w1 - w7) * x4) >> 3
+    let nx5 = (x8 - (w1 + w7) * x5) >> 3
+    x8 = w3 * (x6 + x7) + 4
+    let nx6 = (x8 - (w3 - w5) * x6) >> 3
+    let nx7 = (x8 - (w3 + w5) * x7) >> 3
+    x8 = x0 + x1
+    x0 = x0 - x1
+    let x1b = w6 * (x3 + x2) + 4
+    let nx2 = (x1b - (w2 + w6) * x2) >> 3
+    let nx3 = (x1b + (w2 - w6) * x3) >> 3
+    let y1 = nx4 + nx6
+    let y4 = nx4 - nx6
+    let y6 = nx5 + nx7
+    let y5 = nx5 - nx7
+    let y7 = x8 + nx3
+    let y8 = x8 - nx3
+    let y3 = x0 + nx2
+    let y0 = x0 - nx2
+    let y2 = (181 * (y4 + y5) + 128) >> 8
+    let y4b = (181 * (y4 - y5) + 128) >> 8
+    vec_set(blk, col, img_clamp8(((y7 + y1) >> 14) + 128))
+    vec_set(blk, col + 8, img_clamp8(((y3 + y2) >> 14) + 128))
+    vec_set(blk, col + 16, img_clamp8(((y0 + y4b) >> 14) + 128))
+    vec_set(blk, col + 24, img_clamp8(((y8 + y6) >> 14) + 128))
+    vec_set(blk, col + 32, img_clamp8(((y8 - y6) >> 14) + 128))
+    vec_set(blk, col + 40, img_clamp8(((y0 - y4b) >> 14) + 128))
+    vec_set(blk, col + 48, img_clamp8(((y3 - y2) >> 14) + 128))
+    vec_set(blk, col + 56, img_clamp8(((y7 - y1) >> 14) + 128))
+}
+
+fn jpg_idct(blk: Vec<i64>) {
+    let mut r: i64 = 0
+    while r < 8 {
+        jpg_idct_row(blk, r * 8)
+        r = r + 1
+    }
+    let mut c: i64 = 0
+    while c < 8 {
+        jpg_idct_col(blk, c)
+        c = c + 1
+    }
+}

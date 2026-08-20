@@ -1,0 +1,344 @@
+// webp_l_huff.baga — VP8L bit reader, Huffman, ARGB pack.
+
+import "types.baga"
+
+struct Vp8b {
+    data: bytes,
+    pos: i64,
+    buf: i64,
+    nbits: i64,
+    ok: i64,
+    err: str,
+    v: i64
+}
+
+fn vp8b_new(data: bytes) -> Vp8b {
+    return Vp8b { data: data, pos: 0, buf: 0, nbits: 0, ok: 1, err: "", v: 0 }
+}
+
+fn vp8b_fail(br: Vp8b, msg: str) -> Vp8b {
+    br.ok = 0
+    br.err = msg
+    return br
+}
+
+fn vp8b_bits(br: Vp8b, n: i64) -> Vp8b {
+    if br.ok == 0 {
+        return br
+    }
+    if n <= 0 {
+        br.v = 0
+        return br
+    }
+    while br.nbits < n {
+        if br.pos >= bytes_len(br.data) {
+            return vp8b_fail(br, "webp: truncated VP8L")
+        }
+        br.buf = br.buf | ((bytes_at(br.data, br.pos) & 255) << br.nbits)
+        br.nbits = br.nbits + 8
+        br.pos = br.pos + 1
+    }
+    br.v = br.buf & ((1 << n) - 1)
+    br.buf = br.buf >> n
+    br.nbits = br.nbits - n
+    return br
+}
+
+fn vp8_zeros(n: i64) -> Vec<i64> {
+    let v = vec_new()
+    let mut i: i64 = 0
+    while i < n {
+        vec_push(v, 0)
+        i = i + 1
+    }
+    return v
+}
+
+struct Vp8lHuff {
+    minc: Vec<i64>,
+    maxc: Vec<i64>,
+    valptr: Vec<i64>,
+    vals: Vec<i64>,
+    single: i64,
+    ok: i64
+}
+
+fn huff_single(s: i64) -> Vp8lHuff {
+    return Vp8lHuff {
+        minc: vp8_zeros(16), maxc: vp8_zeros(16), valptr: vp8_zeros(16),
+        vals: vec_new(), single: s, ok: 1
+    }
+}
+
+fn huff_bad() -> Vp8lHuff {
+    return Vp8lHuff {
+        minc: vp8_zeros(16), maxc: vp8_zeros(16), valptr: vp8_zeros(16),
+        vals: vec_new(), single: 0 - 1, ok: 0
+    }
+}
+
+fn huff_from_lens(lens: Vec<i64>, n: i64) -> Vp8lHuff {
+    let mut nz: i64 = 0
+    let mut the: i64 = 0
+    let mut i: i64 = 0
+    while i < n {
+        if vec_get(lens, i) > 0 {
+            nz = nz + 1
+            the = i
+        }
+        i = i + 1
+    }
+    if nz == 0 {
+        return huff_single(0)
+    }
+    if nz == 1 {
+        return huff_single(the)
+    }
+    let bl = vp8_zeros(16)
+    i = 0
+    while i < n {
+        let L = vec_get(lens, i)
+        if L > 0 && L <= 15 {
+            vec_set(bl, L, vec_get(bl, L) + 1)
+        }
+        i = i + 1
+    }
+    let nextc = vp8_zeros(16)
+    let mut code: i64 = 0
+    let mut L: i64 = 1
+    while L <= 15 {
+        code = code << 1
+        vec_set(nextc, L, code)
+        code = code + vec_get(bl, L)
+        L = L + 1
+    }
+    let minc = vp8_zeros(16)
+    let maxc = vp8_zeros(16)
+    let vp = vp8_zeros(16)
+    let vals = vec_new()
+    L = 1
+    while L <= 15 {
+        if vec_get(bl, L) == 0 {
+            vec_set(maxc, L, 0 - 1)
+        } else {
+            vec_set(minc, L, vec_get(nextc, L))
+            vec_set(vp, L, vec_len(vals))
+            i = 0
+            while i < n {
+                if vec_get(lens, i) == L {
+                    vec_push(vals, i)
+                }
+                i = i + 1
+            }
+            vec_set(maxc, L, vec_get(nextc, L) + vec_get(bl, L) - 1)
+        }
+        L = L + 1
+    }
+    return Vp8lHuff { minc: minc, maxc: maxc, valptr: vp, vals: vals, single: 0 - 1, ok: 1 }
+}
+
+fn huff_dec(br0: Vp8b, h: Vp8lHuff) -> Vp8b {
+    if br0.ok == 0 {
+        return br0
+    }
+    if h.ok == 0 {
+        return vp8b_fail(br0, "webp: bad huffman")
+    }
+    if h.single >= 0 {
+        br0.v = h.single
+        return br0
+    }
+    let mut br = br0
+    let mut code: i64 = 0
+    let mut L: i64 = 1
+    while L <= 15 {
+        br = vp8b_bits(br, 1)
+        if br.ok == 0 {
+            return br
+        }
+        code = (code << 1) | br.v
+        if vec_get(h.maxc, L) >= 0 && code <= vec_get(h.maxc, L) {
+            let idx = vec_get(h.valptr, L) + code - vec_get(h.minc, L)
+            if idx < 0 || idx >= vec_len(h.vals) {
+                return vp8b_fail(br, "webp: huff index")
+            }
+            br.v = vec_get(h.vals, idx)
+            return br
+        }
+        L = L + 1
+    }
+    return vp8b_fail(br, "webp: bad huff code")
+}
+
+fn vp8l_cl_order() -> Vec<i64> {
+    let o = vec_new()
+    vec_push(o, 17)
+    vec_push(o, 18)
+    vec_push(o, 0)
+    vec_push(o, 1)
+    vec_push(o, 2)
+    vec_push(o, 3)
+    vec_push(o, 4)
+    vec_push(o, 5)
+    vec_push(o, 16)
+    vec_push(o, 6)
+    vec_push(o, 7)
+    vec_push(o, 8)
+    vec_push(o, 9)
+    vec_push(o, 10)
+    vec_push(o, 11)
+    vec_push(o, 12)
+    vec_push(o, 13)
+    vec_push(o, 14)
+    vec_push(o, 15)
+    return o
+}
+
+fn vp8l_read_huff(br0: Vp8b, alphabet: i64) -> Vp8b {
+    // Returns br with v unused; Huffman is stored via side channel? 
+    // We'll return Vp8lHuff by stuffing into a global-like: use a wrapper.
+    return br0
+}
+
+struct HuffRead {
+    br: Vp8b,
+    h: Vp8lHuff
+}
+
+fn vp8l_huffman(br0: Vp8b, alphabet: i64) -> HuffRead {
+    let mut br = vp8b_bits(br0, 1)
+    if br.ok == 0 {
+        return HuffRead { br: br, h: huff_bad() }
+    }
+    let lens = vp8_zeros(alphabet)
+    if br.v == 1 {
+        br = vp8b_bits(br, 1)
+        let ns = br.v + 1
+        br = vp8b_bits(br, 1)
+        let nbits = 1 + 7 * br.v
+        br = vp8b_bits(br, nbits)
+        if br.v >= alphabet {
+            return HuffRead { br: vp8b_fail(br, "webp: simple symbol"), h: huff_bad() }
+        }
+        vec_set(lens, br.v, 1)
+        if ns == 2 {
+            br = vp8b_bits(br, 8)
+            if br.ok == 0 || br.v >= alphabet {
+                return HuffRead { br: vp8b_fail(br, "webp: simple symbol2"), h: huff_bad() }
+            }
+            vec_set(lens, br.v, 1)
+        }
+        return HuffRead { br: br, h: huff_from_lens(lens, alphabet) }
+    }
+    br = vp8b_bits(br, 4)
+    let ncl = 4 + br.v
+    let clens = vp8_zeros(19)
+    let order = vp8l_cl_order()
+    let mut i: i64 = 0
+    while i < ncl {
+        br = vp8b_bits(br, 3)
+        if br.ok == 0 {
+            return HuffRead { br: br, h: huff_bad() }
+        }
+        vec_set(clens, vec_get(order, i), br.v)
+        i = i + 1
+    }
+    let hcl = huff_from_lens(clens, 19)
+    br = vp8b_bits(br, 1)
+    let mut maxs = alphabet
+    if br.v == 1 {
+        br = vp8b_bits(br, 3)
+        let ln = 2 + 2 * br.v
+        br = vp8b_bits(br, ln)
+        maxs = 2 + br.v
+        if maxs > alphabet {
+            return HuffRead { br: vp8b_fail(br, "webp: max_symbol"), h: huff_bad() }
+        }
+    }
+    let mut prev: i64 = 8
+    i = 0
+    while i < maxs {
+        br = huff_dec(br, hcl)
+        if br.ok == 0 {
+            return HuffRead { br: br, h: huff_bad() }
+        }
+        let c = br.v
+        if c < 16 {
+            vec_set(lens, i, c)
+            if c != 0 {
+                prev = c
+            }
+            i = i + 1
+        } else {
+            let mut reps: i64 = 0
+            let mut val: i64 = 0
+            if c == 16 {
+                br = vp8b_bits(br, 2)
+                reps = 3 + br.v
+                val = prev
+            } else {
+                if c == 17 {
+                    br = vp8b_bits(br, 3)
+                    reps = 3 + br.v
+                } else {
+                    br = vp8b_bits(br, 7)
+                    reps = 11 + br.v
+                }
+                val = 0
+            }
+            if br.ok == 0 {
+                return HuffRead { br: br, h: huff_bad() }
+            }
+            let mut k: i64 = 0
+            while k < reps {
+                if i >= maxs {
+                    return HuffRead { br: vp8b_fail(br, "webp: code len overflow"), h: huff_bad() }
+                }
+                vec_set(lens, i, val)
+                if val != 0 {
+                    prev = val
+                }
+                i = i + 1
+                k = k + 1
+            }
+        }
+    }
+    return HuffRead { br: br, h: huff_from_lens(lens, alphabet) }
+}
+
+fn vp8l_prefix(br0: Vp8b, prefix: i64) -> Vp8b {
+    if prefix < 4 {
+        br0.v = prefix + 1
+        return br0
+    }
+    let extra = (prefix - 2) >> 1
+    let off = (2 + (prefix & 1)) << extra
+    let br = vp8b_bits(br0, extra)
+    br.v = off + br.v + 1
+    return br
+}
+
+fn vp8l_pack(a: i64, r: i64, g: i64, b: i64) -> i64 {
+    return ((a & 255) << 24) | ((r & 255) << 16) | ((g & 255) << 8) | (b & 255)
+}
+
+fn vp8l_hash(argb: i64, bits: i64) -> i64 {
+    let p = (argb * 506832829) & 4294967295
+    return p >> (32 - bits)
+}
+
+fn vp8l_put(px: bytes, i: i64, argb: i64) {
+    bytes_set(px, i * 4, (argb >> 16) & 255)
+    bytes_set(px, i * 4 + 1, (argb >> 8) & 255)
+    bytes_set(px, i * 4 + 2, argb & 255)
+    bytes_set(px, i * 4 + 3, (argb >> 24) & 255)
+}
+
+fn vp8l_get(px: bytes, i: i64) -> i64 {
+    let r = bytes_at(px, i * 4) & 255
+    let g = bytes_at(px, i * 4 + 1) & 255
+    let b = bytes_at(px, i * 4 + 2) & 255
+    let a = bytes_at(px, i * 4 + 3) & 255
+    return vp8l_pack(a, r, g, b)
+}
+

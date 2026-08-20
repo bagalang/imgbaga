@@ -1,0 +1,246 @@
+// webp_l_xf.baga — VP8L inverse transforms (predictor/color/subgreen/index).
+
+import "types.baga"
+import "webp_l_huff.baga"
+
+fn vp8l_i8(u: i64) -> i64 {
+    let v = u & 255
+    if v >= 128 {
+        return v - 256
+    }
+    return v
+}
+
+fn vp8l_ctd(t: i64, c: i64) -> i64 {
+    return (vp8l_i8(t) * vp8l_i8(c)) >> 5
+}
+
+fn vp8l_avg2(a: i64, b: i64) -> i64 {
+    return ((a & 255) + (b & 255)) / 2
+}
+
+fn vp8l_clamp(a: i64) -> i64 {
+    if a < 0 { return 0 }
+    if a > 255 { return 255 }
+    return a
+}
+
+fn vp8l_pred_px(px: bytes, w: i64, h: i64, x: i64, y: i64) -> i64 {
+    if x < 0 || y < 0 || x >= w || y >= h {
+        return vp8l_pack(255, 0, 0, 0)
+    }
+    return vp8l_get(px, y * w + x)
+}
+
+fn vp8l_predict(mode: i64, L: i64, T: i64, TL: i64, TR: i64) -> i64 {
+    if mode == 0 { return vp8l_pack(255, 0, 0, 0) }
+    if mode == 1 { return L }
+    if mode == 2 { return T }
+    if mode == 3 { return TR }
+    if mode == 4 { return TL }
+    let la = (L >> 24) & 255
+    let lr = (L >> 16) & 255
+    let lg = (L >> 8) & 255
+    let lb = L & 255
+    let ta = (T >> 24) & 255
+    let tr = (T >> 16) & 255
+    let tg = (T >> 8) & 255
+    let tb = T & 255
+    let tla = (TL >> 24) & 255
+    let tlr = (TL >> 16) & 255
+    let tlg = (TL >> 8) & 255
+    let tlb = TL & 255
+    let tra = (TR >> 24) & 255
+    let trr = (TR >> 16) & 255
+    let trg = (TR >> 8) & 255
+    let trb = TR & 255
+    if mode == 5 {
+        return vp8l_pack(
+            vp8l_avg2(vp8l_avg2(la, tra), ta),
+            vp8l_avg2(vp8l_avg2(lr, trr), tr),
+            vp8l_avg2(vp8l_avg2(lg, trg), tg),
+            vp8l_avg2(vp8l_avg2(lb, trb), tb))
+    }
+    if mode == 6 {
+        return vp8l_pack(vp8l_avg2(la, tla), vp8l_avg2(lr, tlr), vp8l_avg2(lg, tlg), vp8l_avg2(lb, tlb))
+    }
+    if mode == 7 {
+        return vp8l_pack(vp8l_avg2(la, ta), vp8l_avg2(lr, tr), vp8l_avg2(lg, tg), vp8l_avg2(lb, tb))
+    }
+    if mode == 8 {
+        return vp8l_pack(vp8l_avg2(tla, ta), vp8l_avg2(tlr, tr), vp8l_avg2(tlg, tg), vp8l_avg2(tlb, tb))
+    }
+    if mode == 9 {
+        return vp8l_pack(vp8l_avg2(ta, tra), vp8l_avg2(tr, trr), vp8l_avg2(tg, trg), vp8l_avg2(tb, trb))
+    }
+    if mode == 10 {
+        return vp8l_pack(
+            vp8l_avg2(vp8l_avg2(la, tla), vp8l_avg2(ta, tra)),
+            vp8l_avg2(vp8l_avg2(lr, tlr), vp8l_avg2(tr, trr)),
+            vp8l_avg2(vp8l_avg2(lg, tlg), vp8l_avg2(tg, trg)),
+            vp8l_avg2(vp8l_avg2(lb, tlb), vp8l_avg2(tb, trb)))
+    }
+    if mode == 11 {
+        let pa = la + ta - tla
+        let pr = lr + tr - tlr
+        let pg = lg + tg - tlg
+        let pb = lb + tb - tlb
+        let pL = vp8l_abs(pa - la) + vp8l_abs(pr - lr) + vp8l_abs(pg - lg) + vp8l_abs(pb - lb)
+        let pT = vp8l_abs(pa - ta) + vp8l_abs(pr - tr) + vp8l_abs(pg - tg) + vp8l_abs(pb - tb)
+        if pL < pT { return L }
+        return T
+    }
+    if mode == 12 {
+        return vp8l_pack(
+            vp8l_clamp(la + ta - tla),
+            vp8l_clamp(lr + tr - tlr),
+            vp8l_clamp(lg + tg - tlg),
+            vp8l_clamp(lb + tb - tlb))
+    }
+    if mode == 13 {
+        let aa = vp8l_avg2(la, ta)
+        let ar = vp8l_avg2(lr, tr)
+        let ag = vp8l_avg2(lg, tg)
+        let ab = vp8l_avg2(lb, tb)
+        return vp8l_pack(
+            vp8l_clamp(aa + (aa - tla) / 2),
+            vp8l_clamp(ar + (ar - tlr) / 2),
+            vp8l_clamp(ag + (ag - tlg) / 2),
+            vp8l_clamp(ab + (ab - tlb) / 2))
+    }
+    return T
+}
+
+fn vp8l_abs(x: i64) -> i64 {
+    if x < 0 { return 0 - x }
+    return x
+}
+
+fn vp8l_add_pred(res: i64, pred: i64) -> i64 {
+    let a = ((res >> 24) + (pred >> 24)) & 255
+    let r = ((res >> 16) + (pred >> 16)) & 255
+    let g = ((res >> 8) + (pred >> 8)) & 255
+    let b = (res + pred) & 255
+    return vp8l_pack(a, r, g, b)
+}
+
+fn vp8l_inv_predictor(px: bytes, w: i64, h: i64, bits: i64, modes: bytes) {
+    let tw = (w + (1 << bits) - 1) / (1 << bits)
+    let mut y: i64 = 0
+    while y < h {
+        let mut x: i64 = 0
+        while x < w {
+            let i = y * w + x
+            let res = vp8l_get(px, i)
+            let mut pred = vp8l_pack(255, 0, 0, 0)
+            if x == 0 && y == 0 {
+                pred = vp8l_pack(255, 0, 0, 0)
+            } else {
+                if y == 0 {
+                    pred = vp8l_pred_px(px, w, h, x - 1, y)
+                } else {
+                    if x == 0 {
+                        pred = vp8l_pred_px(px, w, h, x, y - 1)
+                    } else {
+                        let bi = (y >> bits) * tw + (x >> bits)
+                        let mode = bytes_at(modes, bi * 4 + 1) & 255
+                        let L = vp8l_pred_px(px, w, h, x - 1, y)
+                        let T = vp8l_pred_px(px, w, h, x, y - 1)
+                        let TL = vp8l_pred_px(px, w, h, x - 1, y - 1)
+                        let mut trx = x + 1
+                        let mut try_ = y - 1
+                        if x == w - 1 {
+                            trx = 0
+                            try_ = y
+                        }
+                        let TR = vp8l_pred_px(px, w, h, trx, try_)
+                        pred = vp8l_predict(mode, L, T, TL, TR)
+                    }
+                }
+            }
+            vp8l_put(px, i, vp8l_add_pred(res, pred))
+            x = x + 1
+        }
+        y = y + 1
+    }
+}
+
+fn vp8l_inv_color(px: bytes, w: i64, h: i64, bits: i64, cte: bytes) {
+    let tw = (w + (1 << bits) - 1) / (1 << bits)
+    let mut y: i64 = 0
+    while y < h {
+        let mut x: i64 = 0
+        while x < w {
+            let i = y * w + x
+            let p = vp8l_get(px, i)
+            let bi = (y >> bits) * tw + (x >> bits)
+            // cte pixel: R=red_to_blue, G=green_to_blue, B=green_to_red
+            let rtb = bytes_at(cte, bi * 4) & 255
+            let gtb = bytes_at(cte, bi * 4 + 1) & 255
+            let gtr = bytes_at(cte, bi * 4 + 2) & 255
+            let a = (p >> 24) & 255
+            let r0 = (p >> 16) & 255
+            let g = (p >> 8) & 255
+            let b0 = p & 255
+            let nr = (r0 + vp8l_ctd(gtr, g)) & 255
+            let nb = (b0 + vp8l_ctd(gtb, g) + vp8l_ctd(rtb, nr)) & 255
+            vp8l_put(px, i, vp8l_pack(a, nr, g, nb))
+            x = x + 1
+        }
+        y = y + 1
+    }
+}
+
+fn vp8l_inv_subgreen(px: bytes, n: i64) {
+    let mut i: i64 = 0
+    while i < n {
+        let g = bytes_at(px, i * 4 + 1) & 255
+        bytes_set(px, i * 4, (bytes_at(px, i * 4) + g) & 255)
+        bytes_set(px, i * 4 + 2, (bytes_at(px, i * 4 + 2) + g) & 255)
+        i = i + 1
+    }
+}
+
+fn vp8l_inv_index(px: bytes, rw: i64, h: i64, full_w: i64, wb: i64, pal: bytes, psz: i64) -> bytes {
+    let out = bytes_new(full_w * h * 4)
+    let mut y: i64 = 0
+    while y < h {
+        let mut x: i64 = 0
+        while x < full_w {
+            let mut idx: i64 = 0
+            if wb == 0 {
+                if x < rw {
+                    idx = bytes_at(px, (y * rw + x) * 4 + 1) & 255
+                }
+            } else {
+                let packed = bytes_at(px, (y * rw + (x >> wb)) * 4 + 1) & 255
+                let bpp = 8 >> wb
+                let slot = x & ((1 << wb) - 1)
+                idx = (packed >> (slot * bpp)) & ((1 << bpp) - 1)
+            }
+            if idx < psz {
+                let o = (y * full_w + x) * 4
+                bytes_set(out, o, bytes_at(pal, idx * 4))
+                bytes_set(out, o + 1, bytes_at(pal, idx * 4 + 1))
+                bytes_set(out, o + 2, bytes_at(pal, idx * 4 + 2))
+                bytes_set(out, o + 3, bytes_at(pal, idx * 4 + 3))
+            }
+            x = x + 1
+        }
+        y = y + 1
+    }
+    return out
+}
+
+fn vp8l_delta_pal(pal: bytes, n: i64) {
+    let mut i: i64 = 1
+    while i < n {
+        let o = i * 4
+        let p = o - 4
+        bytes_set(pal, o, (bytes_at(pal, o) + bytes_at(pal, p)) & 255)
+        bytes_set(pal, o + 1, (bytes_at(pal, o + 1) + bytes_at(pal, p + 1)) & 255)
+        bytes_set(pal, o + 2, (bytes_at(pal, o + 2) + bytes_at(pal, p + 2)) & 255)
+        bytes_set(pal, o + 3, (bytes_at(pal, o + 3) + bytes_at(pal, p + 3)) & 255)
+        i = i + 1
+    }
+}

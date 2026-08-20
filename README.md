@@ -102,9 +102,9 @@ GIF animation: `gif_anim_decode` → `gif_anim_frame(a, i)` / `gif_anim_delay(a,
 | `sniff.baga` | magic bytes + extension → format |
 | `ops.baga` | crop, flip, rotate, nearest + bilinear resize, gray, invert |
 | `png.baga` / `zlib.baga` | PNG + zlib wrapper over zipbaga |
-| `jpeg.baga` / `jpeg_enc.baga` | baseline decode / encode |
+| `jpeg.baga` / `jpeg_core` / `jpeg_idct` / `jpeg_enc` / `jpeg_enc_tab` | baseline decode / encode |
 | `gif.baga` | first frame + animation |
-| `webp.baga` / `webp_l.baga` / `webp_vp8*.baga` | WebP RIFF + VP8L + VP8 |
+| `webp.baga` / `webp_l*.baga` / `webp_vp8*.baga` | WebP RIFF + VP8L + VP8 |
 | `bmp` · `pnm` · `qoi` · `ico` · `tiff` | remaining codecs |
 
 ## Run

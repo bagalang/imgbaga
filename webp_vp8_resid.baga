@@ -1,0 +1,177 @@
+// webp_vp8_resid.baga — VP8 residual tokens, WHT, YUV→RGB.
+
+import "types.baga"
+import "webp_vp8_tab.baga"
+import "webp_vp8.baga"
+
+fn vp8i_zeros(n: i64) -> Vec<i64> {
+    let v = vec_new()
+    let mut i: i64 = 0
+    while i < n {
+        vec_push(v, 0)
+        i = i + 1
+    }
+    return v
+}
+
+fn vp8_resid4(br0: Vp8Br, probs: bytes, plane: i64, ctx: i64, qdc: i64, qac: i64, skip0: i64, coeff: Vec<i64>, base: i64) -> Vp8Br {
+    let mut br = br0
+    let mut n: i64 = 0
+    if skip0 == 1 {
+        n = 1
+    }
+    let mut cctx = ctx
+    br = vp8br_bit(br, vp8_prob_at(probs, plane, vp8_band(n), cctx, 0))
+    if br.v == 0 {
+        br.v = 0
+        return br
+    }
+    while n != 16 {
+        n = n + 1
+        br = vp8br_bit(br, vp8_prob_at(probs, plane, vp8_band(n - 1), cctx, 1))
+        if br.v == 0 {
+            cctx = 0
+        } else {
+            let mut v: i64 = 0
+            br = vp8br_bit(br, vp8_prob_at(probs, plane, vp8_band(n - 1), cctx, 2))
+            if br.v == 0 {
+                v = 1
+                cctx = 1
+            } else {
+                br = vp8br_bit(br, vp8_prob_at(probs, plane, vp8_band(n - 1), cctx, 3))
+                if br.v == 0 {
+                    br = vp8br_bit(br, vp8_prob_at(probs, plane, vp8_band(n - 1), cctx, 4))
+                    if br.v == 0 {
+                        v = 2
+                    } else {
+                        br = vp8br_bit(br, vp8_prob_at(probs, plane, vp8_band(n - 1), cctx, 5))
+                        v = 3 + br.v
+                    }
+                } else {
+                    br = vp8br_bit(br, vp8_prob_at(probs, plane, vp8_band(n - 1), cctx, 6))
+                    if br.v == 0 {
+                        br = vp8br_bit(br, vp8_prob_at(probs, plane, vp8_band(n - 1), cctx, 7))
+                        if br.v == 0 {
+                            br = vp8br_bit(br, 159)
+                            v = 5 + br.v
+                        } else {
+                            br = vp8br_bit(br, 165)
+                            let hi = br.v
+                            br = vp8br_bit(br, 145)
+                            v = 7 + 2 * hi + br.v
+                        }
+                    } else {
+                        br = vp8br_bit(br, vp8_prob_at(probs, plane, vp8_band(n - 1), cctx, 8))
+                        let b1 = br.v
+                        br = vp8br_bit(br, vp8_prob_at(probs, plane, vp8_band(n - 1), cctx, 9 + b1))
+                        let cat = 2 * b1 + br.v
+                        v = 0
+                        let mut i: i64 = 0
+                        let mut pr = vp8_cat_prob(cat, 0)
+                        while pr != 0 {
+                            v = v * 2
+                            br = vp8br_bit(br, pr)
+                            v = v + br.v
+                            i = i + 1
+                            pr = vp8_cat_prob(cat, i)
+                        }
+                        v = v + 3 + (8 << cat)
+                    }
+                }
+                cctx = 2
+            }
+            let z = vp8_zig(n - 1)
+            let mut q = qdc
+            if z > 0 {
+                q = qac
+            }
+            let mut c = v * q
+            br = vp8br_bit(br, 128)
+            if br.v == 1 {
+                c = 0 - c
+            }
+            vec_set(coeff, base + z, c)
+            if n == 16 {
+                br.v = 1
+                return br
+            }
+            br = vp8br_bit(br, vp8_prob_at(probs, plane, vp8_band(n), cctx, 0))
+            if br.v == 0 {
+                br.v = 1
+                return br
+            }
+        }
+    }
+    br.v = 1
+    return br
+}
+
+fn vp8_wht(coeff: Vec<i64>) {
+    let m = vp8i_zeros(16)
+    let mut i: i64 = 0
+    while i < 4 {
+        let a0 = vec_get(coeff, 384 + i) + vec_get(coeff, 384 + 12 + i)
+        let a1 = vec_get(coeff, 384 + 4 + i) + vec_get(coeff, 384 + 8 + i)
+        let a2 = vec_get(coeff, 384 + 4 + i) - vec_get(coeff, 384 + 8 + i)
+        let a3 = vec_get(coeff, 384 + i) - vec_get(coeff, 384 + 12 + i)
+        vec_set(m, i, a0 + a1)
+        vec_set(m, 8 + i, a0 - a1)
+        vec_set(m, 4 + i, a3 + a2)
+        vec_set(m, 12 + i, a3 - a2)
+        i = i + 1
+    }
+    let mut out: i64 = 0
+    i = 0
+    while i < 4 {
+        let dc = vec_get(m, i * 4) + 3
+        let a0 = dc + vec_get(m, i * 4 + 3)
+        let a1 = vec_get(m, i * 4 + 1) + vec_get(m, i * 4 + 2)
+        let a2 = vec_get(m, i * 4 + 1) - vec_get(m, i * 4 + 2)
+        let a3 = dc - vec_get(m, i * 4 + 3)
+        vec_set(coeff, out, (a0 + a1) >> 3)
+        vec_set(coeff, out + 16, (a3 + a2) >> 3)
+        vec_set(coeff, out + 32, (a0 - a1) >> 3)
+        vec_set(coeff, out + 48, (a3 - a2) >> 3)
+        out = out + 64
+        i = i + 1
+    }
+}
+
+fn vp8_check_dc(p: i64, mbx: i64, mby: i64) -> i64 {
+    if p != 0 {
+        return p
+    }
+    if mbx == 0 {
+        if mby == 0 {
+            return 12
+        }
+        return 11
+    }
+    if mby == 0 {
+        return 10
+    }
+    return 0
+}
+
+fn vp8_mulhi(v: i64, coeff: i64) -> i64 {
+    return (v * coeff) >> 8
+}
+
+fn vp8_clip_yuv(v: i64) -> i64 {
+    // libwebp VP8Clip8: result is v>>6 when 0 <= v <= 16383
+    if v < 0 {
+        return 0
+    }
+    if v > 16383 {
+        return 255
+    }
+    return v >> 6
+}
+
+fn vp8_yuv2rgb(y: i64, cb: i64, cr: i64) -> Pixel {
+    // libwebp VP8YuvToRgb (BT.601 studio, bit-exact with IM/dwebp)
+    let r = vp8_clip_yuv(vp8_mulhi(y, 19077) + vp8_mulhi(cr, 26149) - 14234)
+    let g = vp8_clip_yuv(vp8_mulhi(y, 19077) - vp8_mulhi(cb, 6419) - vp8_mulhi(cr, 13320) + 8708)
+    let b = vp8_clip_yuv(vp8_mulhi(y, 19077) + vp8_mulhi(cb, 33050) - 17685)
+    return Pixel { r: r, g: g, b: b, a: 255 }
+}

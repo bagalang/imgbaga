@@ -1,0 +1,379 @@
+// webp_vp8_pred.baga — VP8 intra prediction (16x16 / 8x8 / 4x4).
+
+import "types.baga"
+import "webp_vp8.baga"
+
+fn vp8_pred16(ybr: bytes, mode: i64, mbx: i64, mby: i64) {
+    // dest at y=1..16, x=8..23
+    // 0=DC 1=TM 2=VE 3=HE 10=DCTop (left only) 11=DCLeft (top only) 12=128
+    if mode == 12 {
+        let mut y: i64 = 0
+        while y < 16 {
+            let mut x: i64 = 0
+            while x < 16 {
+                vp8_ybr_set(ybr, 1 + y, 8 + x, 128)
+                x = x + 1
+            }
+            y = y + 1
+        }
+        return
+    }
+    if mode == 0 || mode == 10 || mode == 11 {
+        let mut s: i64 = 0
+        let mut nt: i64 = 0
+        let mut nl: i64 = 0
+        if mode != 10 {
+            let mut x: i64 = 0
+            while x < 16 {
+                s = s + vp8_ybr_get(ybr, 0, 8 + x)
+                nt = nt + 1
+                x = x + 1
+            }
+        }
+        if mode != 11 {
+            let mut y: i64 = 0
+            while y < 16 {
+                s = s + vp8_ybr_get(ybr, 1 + y, 7)
+                nl = nl + 1
+                y = y + 1
+            }
+        }
+        let mut dc: i64 = 128
+        if nt + nl > 0 {
+            dc = (s + ((nt + nl) / 2)) / (nt + nl)
+        }
+        let mut y: i64 = 0
+        while y < 16 {
+            let mut x: i64 = 0
+            while x < 16 {
+                vp8_ybr_set(ybr, 1 + y, 8 + x, dc)
+                x = x + 1
+            }
+            y = y + 1
+        }
+        return
+    }
+    if mode == 2 {
+        let mut y: i64 = 0
+        while y < 16 {
+            let mut x: i64 = 0
+            while x < 16 {
+                vp8_ybr_set(ybr, 1 + y, 8 + x, vp8_ybr_get(ybr, 0, 8 + x))
+                x = x + 1
+            }
+            y = y + 1
+        }
+        return
+    }
+    if mode == 3 {
+        let mut y: i64 = 0
+        while y < 16 {
+            let L = vp8_ybr_get(ybr, 1 + y, 7)
+            let mut x: i64 = 0
+            while x < 16 {
+                vp8_ybr_set(ybr, 1 + y, 8 + x, L)
+                x = x + 1
+            }
+            y = y + 1
+        }
+        return
+    }
+    // TM
+    let a = vp8_ybr_get(ybr, 0, 7)
+    let mut y: i64 = 0
+    while y < 16 {
+        let L = vp8_ybr_get(ybr, 1 + y, 7)
+        let mut x: i64 = 0
+        while x < 16 {
+            vp8_ybr_set(ybr, 1 + y, 8 + x, vp8_clip8(L + vp8_ybr_get(ybr, 0, 8 + x) - a))
+            x = x + 1
+        }
+        y = y + 1
+    }
+}
+
+fn vp8_pred8(ybr: bytes, mode: i64, by: i64, bx: i64, mbx: i64, mby: i64) {
+    if mode == 12 {
+        let mut y: i64 = 0
+        while y < 8 {
+            let mut x: i64 = 0
+            while x < 8 {
+                vp8_ybr_set(ybr, by + y, bx + x, 128)
+                x = x + 1
+            }
+            y = y + 1
+        }
+        return
+    }
+    if mode == 0 || mode == 10 || mode == 11 {
+        let mut s: i64 = 0
+        let mut n: i64 = 0
+        if mode != 10 {
+            let mut x: i64 = 0
+            while x < 8 {
+                s = s + vp8_ybr_get(ybr, by - 1, bx + x)
+                n = n + 1
+                x = x + 1
+            }
+        }
+        if mode != 11 {
+            let mut y: i64 = 0
+            while y < 8 {
+                s = s + vp8_ybr_get(ybr, by + y, bx - 1)
+                n = n + 1
+                y = y + 1
+            }
+        }
+        let mut dc: i64 = 128
+        if n > 0 {
+            dc = (s + n / 2) / n
+        }
+        let mut y: i64 = 0
+        while y < 8 {
+            let mut x: i64 = 0
+            while x < 8 {
+                vp8_ybr_set(ybr, by + y, bx + x, dc)
+                x = x + 1
+            }
+            y = y + 1
+        }
+        return
+    }
+    if mode == 2 {
+        let mut y: i64 = 0
+        while y < 8 {
+            let mut x: i64 = 0
+            while x < 8 {
+                vp8_ybr_set(ybr, by + y, bx + x, vp8_ybr_get(ybr, by - 1, bx + x))
+                x = x + 1
+            }
+            y = y + 1
+        }
+        return
+    }
+    if mode == 3 {
+        let mut y: i64 = 0
+        while y < 8 {
+            let L = vp8_ybr_get(ybr, by + y, bx - 1)
+            let mut x: i64 = 0
+            while x < 8 {
+                vp8_ybr_set(ybr, by + y, bx + x, L)
+                x = x + 1
+            }
+            y = y + 1
+        }
+        return
+    }
+    let a = vp8_ybr_get(ybr, by - 1, bx - 1)
+    let mut y: i64 = 0
+    while y < 8 {
+        let L = vp8_ybr_get(ybr, by + y, bx - 1)
+        let mut x: i64 = 0
+        while x < 8 {
+            vp8_ybr_set(ybr, by + y, bx + x, vp8_clip8(L + vp8_ybr_get(ybr, by - 1, bx + x) - a))
+            x = x + 1
+        }
+        y = y + 1
+    }
+}
+
+fn vp8_avg2(a: i64, b: i64) -> i64 {
+    return (a + b + 1) / 2
+}
+
+fn vp8_avg3(a: i64, b: i64, c: i64) -> i64 {
+    return (a + 2 * b + c + 2) / 4
+}
+
+fn vp8_pred4(ybr: bytes, mode: i64, y: i64, x: i64) {
+    // Go predfunc.go: a=TL, b.. = top[0..], then top-right to x+7; p..s = left.
+    let a = vp8_ybr_get(ybr, y - 1, x - 1)
+    let b = vp8_ybr_get(ybr, y - 1, x)
+    let c = vp8_ybr_get(ybr, y - 1, x + 1)
+    let d = vp8_ybr_get(ybr, y - 1, x + 2)
+    let e = vp8_ybr_get(ybr, y - 1, x + 3)
+    let f = vp8_ybr_get(ybr, y - 1, x + 4)
+    let g = vp8_ybr_get(ybr, y - 1, x + 5)
+    let h = vp8_ybr_get(ybr, y - 1, x + 6)
+    let hh = vp8_ybr_get(ybr, y - 1, x + 7)
+    let p = vp8_ybr_get(ybr, y, x - 1)
+    let q = vp8_ybr_get(ybr, y + 1, x - 1)
+    let r = vp8_ybr_get(ybr, y + 2, x - 1)
+    let s = vp8_ybr_get(ybr, y + 3, x - 1)
+    if mode == 0 {
+        let dc = (b + c + d + e + p + q + r + s + 4) / 8
+        let mut j: i64 = 0
+        while j < 4 {
+            let mut i: i64 = 0
+            while i < 4 {
+                vp8_ybr_set(ybr, y + j, x + i, dc)
+                i = i + 1
+            }
+            j = j + 1
+        }
+        return
+    }
+    if mode == 1 {
+        let mut j: i64 = 0
+        while j < 4 {
+            let L = vp8_ybr_get(ybr, y + j, x - 1)
+            let mut i: i64 = 0
+            while i < 4 {
+                vp8_ybr_set(ybr, y + j, x + i, vp8_clip8(L + vp8_ybr_get(ybr, y - 1, x + i) - a))
+                i = i + 1
+            }
+            j = j + 1
+        }
+        return
+    }
+    if mode == 2 {
+        let c0 = vp8_avg3(a, b, c)
+        let c1 = vp8_avg3(b, c, d)
+        let c2 = vp8_avg3(c, d, e)
+        let c3 = vp8_avg3(d, e, f)
+        let mut j: i64 = 0
+        while j < 4 {
+            vp8_ybr_set(ybr, y + j, x, c0)
+            vp8_ybr_set(ybr, y + j, x + 1, c1)
+            vp8_ybr_set(ybr, y + j, x + 2, c2)
+            vp8_ybr_set(ybr, y + j, x + 3, c3)
+            j = j + 1
+        }
+        return
+    }
+    if mode == 3 {
+        let r0 = vp8_avg3(a, p, q)
+        let r1 = vp8_avg3(p, q, r)
+        let r2 = vp8_avg3(q, r, s)
+        let r3 = vp8_avg3(r, s, s)
+        let mut i: i64 = 0
+        while i < 4 {
+            vp8_ybr_set(ybr, y, x + i, r0)
+            vp8_ybr_set(ybr, y + 1, x + i, r1)
+            vp8_ybr_set(ybr, y + 2, x + i, r2)
+            vp8_ybr_set(ybr, y + 3, x + i, r3)
+            i = i + 1
+        }
+        return
+    }
+    if mode == 4 {
+        let pab = vp8_avg3(p, a, b)
+        let abc = vp8_avg3(a, b, c)
+        let bcd = vp8_avg3(b, c, d)
+        let cde = vp8_avg3(c, d, e)
+        let qpa = vp8_avg3(q, p, a)
+        let rqp = vp8_avg3(r, q, p)
+        let srq = vp8_avg3(s, r, q)
+        vp8_ybr_set(ybr, y, x, pab)
+        vp8_ybr_set(ybr, y, x + 1, abc)
+        vp8_ybr_set(ybr, y, x + 2, bcd)
+        vp8_ybr_set(ybr, y, x + 3, cde)
+        vp8_ybr_set(ybr, y + 1, x, qpa)
+        vp8_ybr_set(ybr, y + 1, x + 1, pab)
+        vp8_ybr_set(ybr, y + 1, x + 2, abc)
+        vp8_ybr_set(ybr, y + 1, x + 3, bcd)
+        vp8_ybr_set(ybr, y + 2, x, rqp)
+        vp8_ybr_set(ybr, y + 2, x + 1, qpa)
+        vp8_ybr_set(ybr, y + 2, x + 2, pab)
+        vp8_ybr_set(ybr, y + 2, x + 3, abc)
+        vp8_ybr_set(ybr, y + 3, x, srq)
+        vp8_ybr_set(ybr, y + 3, x + 1, rqp)
+        vp8_ybr_set(ybr, y + 3, x + 2, qpa)
+        vp8_ybr_set(ybr, y + 3, x + 3, pab)
+        return
+    }
+    if mode == 5 {
+        vp8_ybr_set(ybr, y, x, vp8_avg2(a, b))
+        vp8_ybr_set(ybr, y, x + 1, vp8_avg2(b, c))
+        vp8_ybr_set(ybr, y, x + 2, vp8_avg2(c, d))
+        vp8_ybr_set(ybr, y, x + 3, vp8_avg2(d, e))
+        vp8_ybr_set(ybr, y + 1, x, vp8_avg3(p, a, b))
+        vp8_ybr_set(ybr, y + 1, x + 1, vp8_avg3(a, b, c))
+        vp8_ybr_set(ybr, y + 1, x + 2, vp8_avg3(b, c, d))
+        vp8_ybr_set(ybr, y + 1, x + 3, vp8_avg3(c, d, e))
+        vp8_ybr_set(ybr, y + 2, x, vp8_avg3(q, p, a))
+        vp8_ybr_set(ybr, y + 2, x + 1, vp8_avg2(a, b))
+        vp8_ybr_set(ybr, y + 2, x + 2, vp8_avg2(b, c))
+        vp8_ybr_set(ybr, y + 2, x + 3, vp8_avg2(c, d))
+        vp8_ybr_set(ybr, y + 3, x, vp8_avg3(r, q, p))
+        vp8_ybr_set(ybr, y + 3, x + 1, vp8_avg3(p, a, b))
+        vp8_ybr_set(ybr, y + 3, x + 2, vp8_avg3(a, b, c))
+        vp8_ybr_set(ybr, y + 3, x + 3, vp8_avg3(b, c, d))
+        return
+    }
+    if mode == 6 {
+        vp8_ybr_set(ybr, y, x, vp8_avg3(b, c, d))
+        vp8_ybr_set(ybr, y, x + 1, vp8_avg3(c, d, e))
+        vp8_ybr_set(ybr, y, x + 2, vp8_avg3(d, e, f))
+        vp8_ybr_set(ybr, y, x + 3, vp8_avg3(e, f, g))
+        vp8_ybr_set(ybr, y + 1, x, vp8_avg3(c, d, e))
+        vp8_ybr_set(ybr, y + 1, x + 1, vp8_avg3(d, e, f))
+        vp8_ybr_set(ybr, y + 1, x + 2, vp8_avg3(e, f, g))
+        vp8_ybr_set(ybr, y + 1, x + 3, vp8_avg3(f, g, h))
+        vp8_ybr_set(ybr, y + 2, x, vp8_avg3(d, e, f))
+        vp8_ybr_set(ybr, y + 2, x + 1, vp8_avg3(e, f, g))
+        vp8_ybr_set(ybr, y + 2, x + 2, vp8_avg3(f, g, h))
+        vp8_ybr_set(ybr, y + 2, x + 3, vp8_avg3(g, h, hh))
+        vp8_ybr_set(ybr, y + 3, x, vp8_avg3(e, f, g))
+        vp8_ybr_set(ybr, y + 3, x + 1, vp8_avg3(f, g, h))
+        vp8_ybr_set(ybr, y + 3, x + 2, vp8_avg3(g, h, hh))
+        vp8_ybr_set(ybr, y + 3, x + 3, vp8_avg3(h, hh, hh))
+        return
+    }
+    if mode == 7 {
+        vp8_ybr_set(ybr, y, x, vp8_avg2(b, c))
+        vp8_ybr_set(ybr, y, x + 1, vp8_avg2(c, d))
+        vp8_ybr_set(ybr, y, x + 2, vp8_avg2(d, e))
+        vp8_ybr_set(ybr, y, x + 3, vp8_avg2(e, f))
+        vp8_ybr_set(ybr, y + 1, x, vp8_avg3(b, c, d))
+        vp8_ybr_set(ybr, y + 1, x + 1, vp8_avg3(c, d, e))
+        vp8_ybr_set(ybr, y + 1, x + 2, vp8_avg3(d, e, f))
+        vp8_ybr_set(ybr, y + 1, x + 3, vp8_avg3(e, f, g))
+        vp8_ybr_set(ybr, y + 2, x, vp8_avg2(c, d))
+        vp8_ybr_set(ybr, y + 2, x + 1, vp8_avg2(d, e))
+        vp8_ybr_set(ybr, y + 2, x + 2, vp8_avg2(e, f))
+        vp8_ybr_set(ybr, y + 2, x + 3, vp8_avg3(f, g, h))
+        vp8_ybr_set(ybr, y + 3, x, vp8_avg3(c, d, e))
+        vp8_ybr_set(ybr, y + 3, x + 1, vp8_avg3(d, e, f))
+        vp8_ybr_set(ybr, y + 3, x + 2, vp8_avg3(e, f, g))
+        vp8_ybr_set(ybr, y + 3, x + 3, vp8_avg3(f, g, h))
+        return
+    }
+    if mode == 8 {
+        vp8_ybr_set(ybr, y, x, vp8_avg2(p, a))
+        vp8_ybr_set(ybr, y, x + 1, vp8_avg3(p, a, b))
+        vp8_ybr_set(ybr, y, x + 2, vp8_avg3(a, b, c))
+        vp8_ybr_set(ybr, y, x + 3, vp8_avg3(b, c, d))
+        vp8_ybr_set(ybr, y + 1, x, vp8_avg2(q, p))
+        vp8_ybr_set(ybr, y + 1, x + 1, vp8_avg3(q, p, a))
+        vp8_ybr_set(ybr, y + 1, x + 2, vp8_avg2(p, a))
+        vp8_ybr_set(ybr, y + 1, x + 3, vp8_avg3(p, a, b))
+        vp8_ybr_set(ybr, y + 2, x, vp8_avg2(r, q))
+        vp8_ybr_set(ybr, y + 2, x + 1, vp8_avg3(r, q, p))
+        vp8_ybr_set(ybr, y + 2, x + 2, vp8_avg2(q, p))
+        vp8_ybr_set(ybr, y + 2, x + 3, vp8_avg3(q, p, a))
+        vp8_ybr_set(ybr, y + 3, x, vp8_avg2(s, r))
+        vp8_ybr_set(ybr, y + 3, x + 1, vp8_avg3(s, r, q))
+        vp8_ybr_set(ybr, y + 3, x + 2, vp8_avg2(r, q))
+        vp8_ybr_set(ybr, y + 3, x + 3, vp8_avg3(r, q, p))
+        return
+    }
+    // HU
+    vp8_ybr_set(ybr, y, x, vp8_avg2(p, q))
+    vp8_ybr_set(ybr, y, x + 1, vp8_avg3(p, q, r))
+    vp8_ybr_set(ybr, y, x + 2, vp8_avg2(q, r))
+    vp8_ybr_set(ybr, y, x + 3, vp8_avg3(q, r, s))
+    vp8_ybr_set(ybr, y + 1, x, vp8_avg2(q, r))
+    vp8_ybr_set(ybr, y + 1, x + 1, vp8_avg3(q, r, s))
+    vp8_ybr_set(ybr, y + 1, x + 2, vp8_avg2(r, s))
+    vp8_ybr_set(ybr, y + 1, x + 3, vp8_avg3(r, s, s))
+    vp8_ybr_set(ybr, y + 2, x, vp8_avg2(r, s))
+    vp8_ybr_set(ybr, y + 2, x + 1, vp8_avg3(r, s, s))
+    vp8_ybr_set(ybr, y + 2, x + 2, s)
+    vp8_ybr_set(ybr, y + 2, x + 3, s)
+    vp8_ybr_set(ybr, y + 3, x, s)
+    vp8_ybr_set(ybr, y + 3, x + 1, s)
+    vp8_ybr_set(ybr, y + 3, x + 2, s)
+    vp8_ybr_set(ybr, y + 3, x + 3, s)
+}
+

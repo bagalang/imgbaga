@@ -1,0 +1,163 @@
+// webp_vp8_recon.baga — VP8 intra reconstruct + loop filter.
+
+import "types.baga"
+import "webp_vp8.baga"
+import "webp_vp8_pred.baga"
+import "webp_vp8_resid.baga"
+
+fn vp8_recon_mb(ybr: bytes, coeff: Vec<i64>, y16: i64, p16: i64, p4: Vec<i64>, pc8: i64, nzac: i64, nzdc: i64, mbx: i64, mby: i64, ypl: bytes, upl: bytes, vpl: bytes, mbw: i64) {
+    if y16 == 1 {
+        vp8_pred16(ybr, vp8_check_dc(p16, mbx, mby), mbx, mby)
+        let mut j: i64 = 0
+        while j < 4 {
+            let mut ii: i64 = 0
+            while ii < 4 {
+                let n = 4 * j + ii
+                let mask = 1 << n
+                if (nzac & mask) != 0 {
+                    vp8_idct4(ybr, coeff, 4 * j + 1, 4 * ii + 8, 16 * n)
+                } else {
+                    if (nzdc & mask) != 0 {
+                        vp8_idct4dc(ybr, coeff, 4 * j + 1, 4 * ii + 8, 16 * n)
+                    }
+                }
+                ii = ii + 1
+            }
+            j = j + 1
+        }
+    } else {
+        let mut j: i64 = 0
+        while j < 4 {
+            let mut ii: i64 = 0
+            while ii < 4 {
+                let n = 4 * j + ii
+                vp8_pred4(ybr, vec_get(p4, j * 4 + ii), 4 * j + 1, 4 * ii + 8)
+                let mask = 1 << n
+                if (nzac & mask) != 0 {
+                    vp8_idct4(ybr, coeff, 4 * j + 1, 4 * ii + 8, 16 * n)
+                } else {
+                    if (nzdc & mask) != 0 {
+                        vp8_idct4dc(ybr, coeff, 4 * j + 1, 4 * ii + 8, 16 * n)
+                    }
+                }
+                ii = ii + 1
+            }
+            j = j + 1
+        }
+    }
+    let pcm = vp8_check_dc(pc8, mbx, mby)
+    vp8_pred8(ybr, pcm, 18, 8, mbx, mby)
+    if (nzac & 983040) != 0 {
+        vp8_idct4(ybr, coeff, 18, 8, 256)
+        vp8_idct4(ybr, coeff, 18, 12, 272)
+        vp8_idct4(ybr, coeff, 22, 8, 288)
+        vp8_idct4(ybr, coeff, 22, 12, 304)
+    } else {
+        if (nzdc & 983040) != 0 {
+            vp8_idct4dc(ybr, coeff, 18, 8, 256)
+            vp8_idct4dc(ybr, coeff, 18, 12, 272)
+            vp8_idct4dc(ybr, coeff, 22, 8, 288)
+            vp8_idct4dc(ybr, coeff, 22, 12, 304)
+        }
+    }
+    vp8_pred8(ybr, pcm, 18, 24, mbx, mby)
+    if (nzac & 15728640) != 0 {
+        vp8_idct4(ybr, coeff, 18, 24, 320)
+        vp8_idct4(ybr, coeff, 18, 28, 336)
+        vp8_idct4(ybr, coeff, 22, 24, 352)
+        vp8_idct4(ybr, coeff, 22, 28, 368)
+    } else {
+        if (nzdc & 15728640) != 0 {
+            vp8_idct4dc(ybr, coeff, 18, 24, 320)
+            vp8_idct4dc(ybr, coeff, 18, 28, 336)
+            vp8_idct4dc(ybr, coeff, 22, 24, 352)
+            vp8_idct4dc(ybr, coeff, 22, 28, 368)
+        }
+    }
+    // copy to planes
+    let mut y: i64 = 0
+    while y < 16 {
+        let mut x: i64 = 0
+        while x < 16 {
+            bytes_set(ypl, (mby * 16 + y) * mbw * 16 + mbx * 16 + x, vp8_ybr_get(ybr, 1 + y, 8 + x))
+            x = x + 1
+        }
+        y = y + 1
+    }
+    y = 0
+    while y < 8 {
+        let mut x: i64 = 0
+        while x < 8 {
+            bytes_set(upl, (mby * 8 + y) * mbw * 8 + mbx * 8 + x, vp8_ybr_get(ybr, 18 + y, 8 + x))
+            bytes_set(vpl, (mby * 8 + y) * mbw * 8 + mbx * 8 + x, vp8_ybr_get(ybr, 18 + y, 24 + x))
+            x = x + 1
+        }
+        y = y + 1
+    }
+}
+
+fn vp8_deblock(ypl: bytes, upl: bytes, vpl: bytes, mbw: i64, mbh: i64, fsimple: i64, flevel: i64, mb_fl: Vec<i64>, mb_fi: Vec<i64>, mb_fh: Vec<i64>, mb_in: Vec<i64>) {
+    if flevel != 0 {
+        let ystr = mbw * 16
+        let cstr = mbw * 8
+        let mut mby: i64 = 0
+        while mby < mbh {
+            let mut mbx: i64 = 0
+            while mbx < mbw {
+                let l = vec_get(mb_fl, mby * mbw + mbx)
+                if l != 0 {
+                    let il = vec_get(mb_fi, mby * mbw + mbx)
+                    let hl = vec_get(mb_fh, mby * mbw + mbx)
+                    let inn = vec_get(mb_in, mby * mbw + mbx)
+                    let yi = (mby * ystr + mbx) * 16
+                    let ci = (mby * cstr + mbx) * 8
+                    if fsimple == 1 {
+                        if mbx > 0 {
+                            vp8_filter2(ypl, l + 4, yi, ystr, 1, 16)
+                        }
+                        if inn == 1 {
+                            vp8_filter2(ypl, l, yi + 4, ystr, 1, 16)
+                            vp8_filter2(ypl, l, yi + 8, ystr, 1, 16)
+                            vp8_filter2(ypl, l, yi + 12, ystr, 1, 16)
+                        }
+                        if mby > 0 {
+                            vp8_filter2(ypl, l + 4, yi, 1, ystr, 16)
+                        }
+                        if inn == 1 {
+                            vp8_filter2(ypl, l, yi + ystr * 4, 1, ystr, 16)
+                            vp8_filter2(ypl, l, yi + ystr * 8, 1, ystr, 16)
+                            vp8_filter2(ypl, l, yi + ystr * 12, 1, ystr, 16)
+                        }
+                    } else {
+                        if mbx > 0 {
+                            vp8_filter246(ypl, 16, l + 4, il, hl, yi, ystr, 1, 0)
+                            vp8_filter246(upl, 8, l + 4, il, hl, ci, cstr, 1, 0)
+                            vp8_filter246(vpl, 8, l + 4, il, hl, ci, cstr, 1, 0)
+                        }
+                        if inn == 1 {
+                            vp8_filter246(ypl, 16, l, il, hl, yi + 4, ystr, 1, 1)
+                            vp8_filter246(ypl, 16, l, il, hl, yi + 8, ystr, 1, 1)
+                            vp8_filter246(ypl, 16, l, il, hl, yi + 12, ystr, 1, 1)
+                            vp8_filter246(upl, 8, l, il, hl, ci + 4, cstr, 1, 1)
+                            vp8_filter246(vpl, 8, l, il, hl, ci + 4, cstr, 1, 1)
+                        }
+                        if mby > 0 {
+                            vp8_filter246(ypl, 16, l + 4, il, hl, yi, 1, ystr, 0)
+                            vp8_filter246(upl, 8, l + 4, il, hl, ci, 1, cstr, 0)
+                            vp8_filter246(vpl, 8, l + 4, il, hl, ci, 1, cstr, 0)
+                        }
+                        if inn == 1 {
+                            vp8_filter246(ypl, 16, l, il, hl, yi + ystr * 4, 1, ystr, 1)
+                            vp8_filter246(ypl, 16, l, il, hl, yi + ystr * 8, 1, ystr, 1)
+                            vp8_filter246(ypl, 16, l, il, hl, yi + ystr * 12, 1, ystr, 1)
+                            vp8_filter246(upl, 8, l, il, hl, ci + cstr * 4, 1, cstr, 1)
+                            vp8_filter246(vpl, 8, l, il, hl, ci + cstr * 4, 1, cstr, 1)
+                        }
+                    }
+                }
+                mbx = mbx + 1
+            }
+            mby = mby + 1
+        }
+    }
+}
