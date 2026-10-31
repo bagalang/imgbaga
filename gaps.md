@@ -50,9 +50,12 @@ Keyframe stills done. Not in v1: inter frames (video), VP8X alpha,
 libwebp fancy chroma upsample (nearest 4:2:0; edges can differ from
 `dwebp`).
 
-### I4 — whole image in memory
+### I4 — ~~whole image in memory~~ — mitigated 2026-10-31
 
-Same as csvbaga C1. Fine for UI thumbs and tests; streaming decode later.
+`img_info(b)` probe-ва хедъра без пълен decode (всички формати).
+`img_load_bounded(b, max_w, max_h)` отхвърля над лимита СЛЕД probe
+(без decode) и downscale-ва до thumbnail при нужда. Peak memory остава
+пълното decode; true streaming decode (ред по ред) остава за v2.
 
 ### I5 — ~~4096 px cap hardcoded~~ — closed 2026-10-31
 

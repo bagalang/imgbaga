@@ -60,6 +60,38 @@ fn img_info(b: bytes) -> ImgInfo {
     return ImgInfo { format: f, w: 0, h: 0, ok: 1, err: "" }
 }
 
+// I4 (closed 2026-10-31): bounded load — probe хедъра primeiro (без пълен
+// decode), отхвърля ако над max_w/max_h, иначе decode + downscale до лимита.
+// Peak memory остава пълното decode, но големи входове се спират рано.
+fn img_load_bounded(b: bytes, max_w: i64, max_h: i64) -> Image {
+    let info = img_info(b)
+    if info.ok == 0 {
+        return img_fail(info.err)
+    }
+    if max_w > 0 && info.w > max_w {
+        return img_fail(concat("img: width ", concat(int_to_str(info.w), concat(" over limit ", int_to_str(max_w)))))
+    }
+    if max_h > 0 && info.h > max_h {
+        return img_fail(concat("img: height ", concat(int_to_str(info.h), concat(" over limit ", int_to_str(max_h)))))
+    }
+    let im = img_load(b)
+    if im.ok == 0 {
+        return im
+    }
+    // downscale ако е над лимита (все пак е заредено, но връщаме thumbnail)
+    if max_w > 0 && im.w > max_w {
+        let mut nh = im.h * max_w / im.w
+        if nh < 1 { nh = 1 }
+        return img_resize_nearest(im, max_w, nh)
+    }
+    if max_h > 0 && im.h > max_h {
+        let mut nw = im.w * max_h / im.h
+        if nw < 1 { nw = 1 }
+        return img_resize_nearest(im, nw, max_h)
+    }
+    return im
+}
+
 fn img_load_format(b: bytes, fmt: i64) -> Image {
     if fmt == img_fmt_png() {
         return png_decode(b)
