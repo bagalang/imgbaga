@@ -89,8 +89,8 @@ fn img_resize(im: Image, nw: i64, nh: i64) -> Image {
     if nw <= 0 || nh <= 0 {
         return img_fail("img: bad resize")
     }
-    if nw > 4096 || nh > 4096 {
-        return img_fail("img: size over 4096 (v1 limit)")
+    if nw > img_max_dim() || nh > img_max_dim() {
+        return img_fail(concat("img: size over ", concat(int_to_str(img_max_dim()), " (limit)")))
     }
     let px = bytes_new(nw * nh * 4)
     let mut y: i64 = 0
@@ -127,8 +127,8 @@ fn img_resize_bilinear(im: Image, nw: i64, nh: i64) -> Image {
     if nw <= 0 || nh <= 0 {
         return img_fail("img: bad resize")
     }
-    if nw > 4096 || nh > 4096 {
-        return img_fail("img: size over 4096 (v1 limit)")
+    if nw > img_max_dim() || nh > img_max_dim() {
+        return img_fail(concat("img: size over ", concat(int_to_str(img_max_dim()), " (limit)")))
     }
     if nw == im.w && nh == im.h {
         let px = bytes_new(im.w * im.h * 4)

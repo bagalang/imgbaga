@@ -139,7 +139,7 @@ fn pnm_decode(b: bytes) -> Image {
     let w = pnm_ival(cw)
     let h = pnm_ival(ch)
     let maxv = pnm_ival(cm)
-    if w <= 0 || h <= 0 || w > 4096 || h > 4096 {
+    if w <= 0 || h <= 0 || w > img_max_dim() || h > img_max_dim() {
         return img_fail("pnm: bad size")
     }
     if maxv <= 0 {

@@ -186,7 +186,7 @@ fn tiff_decode(src: bytes) -> Image {
     }
     let w = tiff_tag(src, ifd, be, 256)
     let h = tiff_tag(src, ifd, be, 257)
-    if w <= 0 || h <= 0 || w > 4096 || h > 4096 {
+    if w <= 0 || h <= 0 || w > img_max_dim() || h > img_max_dim() {
         return img_fail("tiff: bad size")
     }
     let mut comp = tiff_tag(src, ifd, be, 259)

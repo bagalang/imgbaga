@@ -93,7 +93,7 @@ fn png_decode(src: bytes) -> Image {
             if depth != 8 && depth != 16 && ctype != 0 && ctype != 3 {
                 return img_fail("png: packed bits only gray/palette")
             }
-            if w <= 0 || h <= 0 || w > 4096 || h > 4096 {
+            if w <= 0 || h <= 0 || w > img_max_dim() || h > img_max_dim() {
                 return img_fail("png: bad size")
             }
             have_ihdr = 1

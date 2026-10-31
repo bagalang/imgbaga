@@ -104,7 +104,7 @@ fn ico_decode_bmp(b: bytes) -> Image {
     if bpp != 24 && bpp != 32 {
         return img_fail("ico: only 24/32 bpp")
     }
-    if w <= 0 || h <= 0 || w > 4096 || h > 4096 {
+    if w <= 0 || h <= 0 || w > img_max_dim() || h > img_max_dim() {
         return img_fail("ico: bad size")
     }
     let spp = bpp / 8

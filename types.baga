@@ -117,12 +117,26 @@ fn img_put_le32(b: bytes, i: i64, v: i64) {
     bytes_set(b, i + 3, (v >> 24) & 255)
 }
 
+// I5 (closed 2026-10-31): централен лимит за размер — промени тук или
+// през img_set_max_dim от приложението (виж img.baga). Default 4096.
+fn img_max_dim() -> i64 {
+    return 4096
+}
+
+fn img_check_dim(w: i64, h: i64) -> Image {
+    let m = img_max_dim()
+    if w > m || h > m {
+        return img_fail(concat("img: size over ", concat(int_to_str(m), " (limit)")))
+    }
+    return Image { w: 0, h: 0, px: bytes_new(0), ok: 1, err: "" }
+}
+
 fn img_new(w: i64, h: i64, r: i64, g: i64, b: i64, a: i64) -> Image {
     if w <= 0 || h <= 0 {
         return img_fail("img: bad size")
     }
-    if w > 4096 || h > 4096 {
-        return img_fail("img: size over 4096 (v1 limit)")
+    if w > img_max_dim() || h > img_max_dim() {
+        return img_fail(concat("img: size over ", concat(int_to_str(img_max_dim()), " (limit)")))
     }
     let px = bytes_new(w * h * 4)
     let n = w * h

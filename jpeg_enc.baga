@@ -362,7 +362,7 @@ fn jpeg_encode_q(im: Image, quality: i64) -> bytes {
     if im.ok == 0 || im.w <= 0 || im.h <= 0 {
         return bytes_new(0)
     }
-    if im.w > 4096 || im.h > 4096 {
+    if im.w > img_max_dim() || im.h > img_max_dim() {
         return bytes_new(0)
     }
     let zz = je_zz()

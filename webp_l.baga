@@ -336,7 +336,7 @@ fn vp8l_decode(src: bytes, expect_w: i64, expect_h: i64) -> Image {
     if br.ok == 0 {
         return img_fail(br.err)
     }
-    if w != expect_w || h != expect_h || w > 4096 || h > 4096 {
+    if w != expect_w || h != expect_h || w > img_max_dim() || h > img_max_dim() {
         return img_fail("webp: size mismatch")
     }
     let ttype = vec_new()

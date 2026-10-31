@@ -402,7 +402,7 @@ fn jpg_parse_sof(j: Jpg, start: i64, end: i64) -> Jpg {
     j.h = img_be16(j.data, start + 1)
     j.w = img_be16(j.data, start + 3)
     j.ncomp = bytes_at(j.data, start + 5) & 255
-    if j.w <= 0 || j.h <= 0 || j.w > 4096 || j.h > 4096 {
+    if j.w <= 0 || j.h <= 0 || j.w > img_max_dim() || j.h > img_max_dim() {
         return jpg_fail(j, "jpeg: bad size")
     }
     if j.ncomp != 1 && j.ncomp != 3 {

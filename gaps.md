@@ -54,6 +54,9 @@ libwebp fancy chroma upsample (nearest 4:2:0; edges can differ from
 
 Same as csvbaga C1. Fine for UI thumbs and tests; streaming decode later.
 
-### I5 — 4096 px cap
+### I5 — ~~4096 px cap hardcoded~~ — closed 2026-10-31
 
-Defensive v1 limit (arena). Raise when a product needs posters.
+Лимитът е централизиран в `img_max_dim()` (types.baga, default 4096).
+Всички декодери/операции (bmp, ico, jpeg, jpeg_enc, ops, png, pnm, qoi,
+tiff, webp) ползват `img_max_dim()`. Продукт с нужда от по-големи
+изображения променя единствената функция.

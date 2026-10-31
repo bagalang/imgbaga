@@ -21,7 +21,7 @@ fn vp8_decode(src: bytes) -> Image {
     }
     let w = (bytes_at(src, 6) & 255) | (((bytes_at(src, 7) & 255) & 63) << 8)
     let h = (bytes_at(src, 8) & 255) | (((bytes_at(src, 9) & 255) & 63) << 8)
-    if w <= 0 || h <= 0 || w > 4096 || h > 4096 {
+    if w <= 0 || h <= 0 || w > img_max_dim() || h > img_max_dim() {
         return img_fail("vp8: bad size")
     }
     let mbw = (w + 15) / 16

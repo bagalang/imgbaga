@@ -40,7 +40,7 @@ fn qoi_decode(src: bytes) -> Image {
     let w = img_be32(src, 4)
     let h = img_be32(src, 8)
     let ch = bytes_at(src, 12) & 255
-    if w <= 0 || h <= 0 || w > 4096 || h > 4096 {
+    if w <= 0 || h <= 0 || w > img_max_dim() || h > img_max_dim() {
         return img_fail("qoi: bad size")
     }
     if ch != 3 && ch != 4 {
@@ -160,7 +160,7 @@ fn qoi_encode(im: Image) -> bytes {
     if im.ok == 0 || im.w <= 0 || im.h <= 0 {
         return bytes_new(0)
     }
-    if im.w > 4096 || im.h > 4096 {
+    if im.w > img_max_dim() || im.h > img_max_dim() {
         return bytes_new(0)
     }
     let cap = 14 + im.w * im.h * 5 + 8
